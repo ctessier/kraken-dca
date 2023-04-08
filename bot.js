@@ -2,6 +2,11 @@
 const crypto = require("crypto");
 const https = require("https");
 
+const ASSET_CODES = {
+  btc: 'XBT',
+  eth: 'ETH',
+}
+
 /**
  * Kraken DCA Bot
  * by @codepleb
@@ -11,15 +16,18 @@ const https = require("https");
  */
 
 const main = async () => {
+  const NOTIFICATION_CHANNEL = process.env.NOTIFICATION_CHANNEL || null; // OPTIONAL! Ntfy channel
   const KRAKEN_API_PUBLIC_KEY = process.env.KRAKEN_API_PUBLIC_KEY; // Kraken API public key
   const KRAKEN_API_PRIVATE_KEY = process.env.KRAKEN_API_PRIVATE_KEY; // Kraken API private key
+  const ALLOCATION_RATIO = process.env.ALLOCATION_RATIO || 1; // OPTIONAL! Ratio of the current fiat balance to allocate for this DCA. Useful when running multiple DCA on the same account.
+  const CRYPTO = process.env.CRYPTO || 'btc'; // OPTIONAL! Crypto to buy (e.g. 'btc' or 'eth', default 'btc')
   const CURRENCY = process.env.CURRENCY || "USD"; // Choose the currency that you are depositing regularly. Check here how you currency has to be named: https://docs.kraken.com/rest/#operation/getAccountBalance
   const DATE_OF_CASH_REFILL = Number(process.env.DATE_OF_CASH_REFILL); // OPTIONAL! Day of month, where new funds get deposited regularly (ignore weekends, that will be handled automatically)
   const KRAKEN_WITHDRAWAL_ADDRESS_KEY =
     process.env.KRAKEN_WITHDRAWAL_ADDRESS_KEY || false; // OPTIONAL! The "Description" (name) of the whitelisted bitcoin address on kraken. Don't set this option if you don't want automatic withdrawals.
   const WITHDRAW_TARGET = Number(process.env.WITHDRAW_TARGET) || false; // OPTIONAL! If you set the withdrawal key option but you don't want to withdraw once a month, but rather when reaching a certain amount of accumulated bitcoin, use this variable to override the "withdraw on date" functionality.
-  const KRAKEN_BTC_ORDER_SIZE =
-    Number(process.env.KRAKEN_BTC_ORDER_SIZE) || 0.0001; // OPTIONAL! Changing this value is not recommended. Kraken currently has a minimum order size of 0.0001 BTC. You can adapt it if you prefer fewer buys (for better tax management or other reasons).
+  const KRAKEN_ORDER_SIZE =
+    Number(process.env.KRAKEN_ORDER_SIZE) || 0.0001; // OPTIONAL! Changing this value is not recommended. Kraken currently has a minimum order size of 0.0001 for BTC. You can adapt it if you prefer fewer buys (for better tax management or other reasons).
   const FIAT_CHECK_DELAY = Number(process.env.FIAT_CHECK_DELAY) || 60 * 1000; // OPTIONAL! Custom fiat check delay. This delay should not be smaller than the delay between orders.
 
   const publicApiPath = "/0/public/";
@@ -39,7 +47,7 @@ const main = async () => {
   withdrawalDate.setMonth(withdrawalDate.getMonth() + 1);
 
   let lastFiatBalance = Number.NEGATIVE_INFINITY;
-  let lastBtcFiatPrice = Number.NEGATIVE_INFINITY;
+  let lastCryptoFiatPrice = Number.NEGATIVE_INFINITY;
   let dateOfEmptyFiat = new Date();
   let dateOfNextOrder = new Date();
 
@@ -61,6 +69,7 @@ const main = async () => {
   log();
   log("DCA activated now!");
   log("Fiat currency to be used:", CURRENCY);
+  log("Crypto to purchase:", CRYPTO.toUpperCase());
 
   const runner = async () => {
     while (true) {
@@ -73,6 +82,8 @@ const main = async () => {
       }
       fiatAmount = Number(balance[fiatPrefix + CURRENCY]);
       logQueue.push(`Fiat: ${Number(fiatAmount).toFixed(2)} ${CURRENCY}`);
+      fiatAmount = fiatAmount * ALLOCATION_RATIO;
+      logQueue.push(`Fiat allocated for ${CRYPTO.toUpperCase()}: ${Number(fiatAmount).toFixed(2)} ${CURRENCY}`);
       const newFiatArrived = fiatAmount > lastFiatBalance;
       if (newFiatArrived || firstRun) {
         estimateNextFiatDepositDate(firstRun);
@@ -83,29 +94,29 @@ const main = async () => {
         firstRun = false;
       }
 
-      lastBtcFiatPrice = await fetchBtcFiatPrice();
-      if (!lastBtcFiatPrice) {
+      lastCryptoFiatPrice = await fetchCryptoFiatPrice();
+      if (!lastCryptoFiatPrice) {
         printInvalidCurrencyError();
         await timer(15000);
         continue;
       }
-      logQueue.push(`BTC Price: ${lastBtcFiatPrice.toFixed(2)} ${CURRENCY}`);
+      logQueue.push(`${CRYPTO.toUpperCase()} Price: ${lastCryptoFiatPrice.toFixed(2)} ${CURRENCY}`);
 
-      const btcAmount = Number(balance.XXBT);
+      const cryptoAmount = Number(balance[`${cryptoPrefix}${ASSET_CODES[CRYPTO]}`]);
       const now = Date.now();
       // ---|--o|---|---|---|---|-o-|---
       //  x  ===  x   x   x   x  ===  x
       if (dateOfNextOrder < now || newFiatArrived) {
-        await buyBitcoin(logQueue);
+        await buyCrypto(logQueue);
         evaluateMillisUntilNextOrder();
         buyOrderExecuted = true;
       }
 
-      const newBtcAmount = btcAmount + KRAKEN_BTC_ORDER_SIZE;
+      const newCryptoAmount = cryptoAmount + KRAKEN_ORDER_SIZE;
       logQueue.push(
-        `Accumulated BTC: ${newBtcAmount.toFixed(
-          String(KRAKEN_BTC_ORDER_SIZE).split(".")[1].length
-        )} ₿`
+        `Estimated ${CRYPTO.toUpperCase()} after order filled: ${newCryptoAmount.toFixed(
+          String(KRAKEN_ORDER_SIZE).split(".")[1].length
+        )} ${CRYPTO.toUpperCase()}`
       );
 
       logQueue.push(
@@ -116,8 +127,8 @@ const main = async () => {
 
       flushLogging(buyOrderExecuted);
 
-      if (buyOrderExecuted && isWithdrawalDue(newBtcAmount)) {
-        await withdrawBtc(newBtcAmount);
+      if (buyOrderExecuted && isWithdrawalDue(newCryptoAmount)) {
+        await withdrawCrypto(newCryptoAmount);
       }
 
       await timer(FIAT_CHECK_DELAY);
@@ -235,6 +246,30 @@ const main = async () => {
     }
   };
 
+  const sendNotification = (txid, message) => {
+    if (!NOTIFICATION_CHANNEL) {
+      resolve();
+    }
+
+    const orderUrl = `https://www.kraken.com/u/trade/orders?order-modal-context=open-orders&otxid=${txid}`;
+
+    return fetch(`https://ntfy.sh`, {
+        method: 'POST',
+        body: JSON.stringify({
+          topic: NOTIFICATION_CHANNEL,
+          message,
+          tags: ['robot'],
+          title: 'Kraken DCA Bot',
+          click: orderUrl,
+          actions: [{
+            action: 'view',
+            label: 'Open order',
+            url: orderUrl
+          }]
+      })
+    });
+  }
+
   const createAuthenticationSignature = (
     apiPrivateKey,
     apiPath,
@@ -253,7 +288,7 @@ const main = async () => {
     return signatureString;
   };
 
-  const buyBitcoin = async () => {
+  const buyCrypto = async () => {
     let buyOrderResponse;
     try {
       buyOrderResponse = await executeBuyOrder();
@@ -267,10 +302,13 @@ const main = async () => {
           `Kraken: ${buyOrderResponse?.result?.descr?.order} > Success!`
         );
         logQueue.push(
-          `Bought for ~${(lastBtcFiatPrice * KRAKEN_BTC_ORDER_SIZE).toFixed(
+          `Order for ~${(lastCryptoFiatPrice * KRAKEN_ORDER_SIZE).toFixed(
             2
           )} ${CURRENCY}`
         );
+        sendNotification(buyOrderResponse?.result?.txid[0], `New order for ${CRYPTO.toUpperCase()} @ limit ${(lastCryptoFiatPrice).toFixed(1)} (~${(lastCryptoFiatPrice * KRAKEN_ORDER_SIZE).toFixed(
+          2
+        )} ${CURRENCY})`);
       }
     } catch (e) {
       console.error(
@@ -281,7 +319,7 @@ const main = async () => {
 
   const executeBuyOrder = async () => {
     const privateEndpoint = "AddOrder";
-    const privateInputParameters = `pair=xbt${CURRENCY.toLowerCase()}&type=buy&ordertype=market&volume=${KRAKEN_BTC_ORDER_SIZE}`;
+    const privateInputParameters = `pair=${ASSET_CODES[CRYPTO].toLowerCase()}${CURRENCY.toLowerCase()}&type=buy&ordertype=limit&volume=${KRAKEN_ORDER_SIZE}&price=${(lastCryptoFiatPrice).toFixed(1)}&oflags=post`;
     let privateResponse = "";
     privateResponse = await queryPrivateApi(
       privateEndpoint,
@@ -292,7 +330,7 @@ const main = async () => {
 
   const executeWithdrawal = async (amount) => {
     const privateEndpoint = "Withdraw";
-    const privateInputParameters = `asset=XBT&key=${KRAKEN_WITHDRAWAL_ADDRESS_KEY}&amount=${amount}`;
+    const privateInputParameters = `asset=${ASSET_CODES[CRYPTO]}&key=${KRAKEN_WITHDRAWAL_ADDRESS_KEY}&amount=${amount}`;
     let privateResponse = "";
     privateResponse = await queryPrivateApi(
       privateEndpoint,
@@ -310,22 +348,22 @@ const main = async () => {
     return false;
   };
 
-  const isWithdrawalDue = (btcAmount) =>
+  const isWithdrawalDue = (cryptoAmount) =>
     (KRAKEN_WITHDRAWAL_ADDRESS_KEY &&
       !WITHDRAW_TARGET &&
       isWithdrawalDateDue()) ||
     (KRAKEN_WITHDRAWAL_ADDRESS_KEY &&
       WITHDRAW_TARGET &&
-      WITHDRAW_TARGET <= btcAmount);
+      WITHDRAW_TARGET <= cryptoAmount);
 
-  const fetchBtcFiatPrice = async () =>
+  const fetchCryptoFiatPrice = async () =>
     Number(
       (
         await queryPublicApi(
           "Ticker",
-          `pair=${cryptoPrefix}XBT${fiatPrefix}${CURRENCY}`
+          `pair=${cryptoPrefix}${ASSET_CODES[CRYPTO]}${fiatPrefix}${CURRENCY}`
         )
-      )?.result?.[`${cryptoPrefix}XBT${fiatPrefix}${CURRENCY}`]?.p?.[0]
+      )?.result?.[`${cryptoPrefix}${ASSET_CODES[CRYPTO]}${fiatPrefix}${CURRENCY}`]?.b?.[0]
     );
 
   const printInvalidCurrencyError = () => {
@@ -348,9 +386,9 @@ const main = async () => {
     }
   };
 
-  const withdrawBtc = async (btcAmount) => {
-    console.log(`Attempting to withdraw ${btcAmount} ₿ ...`);
-    const withdrawal = await executeWithdrawal(btcAmount);
+  const withdrawCrypto = async (cryptoAmount) => {
+    console.log(`Attempting to withdraw ${cryptoAmount} ${CRYPTO.toUpperCase()} ...`);
+    const withdrawal = await executeWithdrawal(cryptoAmount);
     if (withdrawal?.result?.refid)
       console.log(`Withdrawal executed! Date: ${new Date().toLocaleString()}!`);
     else console.error(`Withdrawal failed! ${withdrawal?.error}`);
@@ -379,10 +417,10 @@ const main = async () => {
   };
 
   const evaluateMillisUntilNextOrder = () => {
-    if (lastBtcFiatPrice > 0) {
-      const myFiatValueInBtc = fiatAmount / lastBtcFiatPrice;
+    if (lastCryptoFiatPrice > 0) {
+      const myFiatValueInCrypto = fiatAmount / lastCryptoFiatPrice;
       const approximatedAmoutOfOrdersUntilFiatRefill =
-        myFiatValueInBtc / KRAKEN_BTC_ORDER_SIZE;
+        myFiatValueInCrypto / KRAKEN_ORDER_SIZE;
 
       const now = Date.now();
       dateOfNextOrder = new Date(
@@ -391,7 +429,7 @@ const main = async () => {
           now
       );
     } else {
-      console.error("Last BTC fiat price was not present!");
+      console.error(`Last ${CRYPTO.toUpperCase()} fiat price was not present!`);
     }
   };
 

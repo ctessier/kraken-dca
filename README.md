@@ -86,6 +86,7 @@ These are the variables you add in the command that starts the bot. If you use d
 
 ```bash
 # Values containing whitespaces NEED to be enclosed within "".
+CRYPTO: # OPTIONAL! Crypto to buy (e.g. 'btc' or 'eth', default 'btc')
 
 KRAKEN_API_PUBLIC_KEY: # Your Kraken public key, created here: https://www.kraken.com/u/security/api/new
 
@@ -99,9 +100,13 @@ KRAKEN_WITHDRAWAL_ADDRESS_KEY: # [Optional, if you don't want automated withdraw
 
 WITHDRAW_TARGET: # [Optional, if monthly withdrawals are good enough for you] If you accumulate X amount of Bitcoin, initiate an automated withdrawal. This ONLY works, if the variable 'KRAKEN_WITHDRAWAL_ADDRESS_KEY' is also given. E.g. 0.01 || DEFAULT: ignored
 
-KRAKEN_BTC_ORDER_SIZE: # [Optional for almost anyone! Only adapt if you don't hustle that maximum DCA lifestyle] Any Bitcoin amount above the default || DEFAULT: 0.0001
+KRAKEN_ORDER_SIZE: # [Optional for almost anyone! Only adapt if you don't hustle that maximum DCA lifestyle] Any amount above the default || DEFAULT: 0.0001 (min size for BTC)
 
 FIAT_CHECK_DELAY: # [Optional for almost anyone!] The time between each cycle. Any number in milliseconds! || Default: 60000 (which is 1 minute)
+
+NOTIFICATION_CHANNEL: # OPTIONAL! Ntfy channel
+
+ALLOCATION_RATIO: # OPTIONAL! Ratio of the current fiat balance to allocate for this DCA. Useful when running multiple DCA on the same account.
 
 ```
 

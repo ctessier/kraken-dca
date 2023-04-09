@@ -128,7 +128,14 @@ const main = async () => {
         await timer(60000);
         continue;
       }
-      cryptoPrecision = String(lastCryptoFiatPrice).split('.')[1].length;
+      cryptoPrecision = String(lastCryptoFiatPrice).split('.')[1]?.length;
+      if (!cryptoPrecision) {
+        console.error(
+          "Couldn't get precision. Fiat price were sent without decimals because it equals 0. Retrying in 1m."
+        );
+        await(60000);
+        continue;
+      }
       buyValue = (lastCryptoFiatPrice - (2 / Math.pow(10, cryptoPrecision))).toFixed(cryptoPrecision);
       logQueue.push(`${CRYPTO.toUpperCase()} Price: ${lastCryptoFiatPrice.toFixed(cryptoPrecision)} ${CURRENCY}`);
 

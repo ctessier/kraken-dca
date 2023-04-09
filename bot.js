@@ -278,7 +278,7 @@ const main = async () => {
 
   const sendNotification = (txid, message) => {
     if (!NOTIFICATION_CHANNEL) {
-      resolve();
+      return;
     }
 
     const orderUrl = `https://www.kraken.com/u/trade/orders?order-modal-context=open-orders&otxid=${txid}`;
@@ -336,7 +336,7 @@ const main = async () => {
             2
           )} ${CURRENCY}`
         );
-        sendNotification(buyOrderResponse?.result?.txid[0], `New order for ${CRYPTO.toUpperCase()} @ limit ${buyValue} (~${(buyValue * KRAKEN_ORDER_SIZE).toFixed(
+        await sendNotification(buyOrderResponse?.result?.txid[0], `New order for ${CRYPTO.toUpperCase()} @ limit ${buyValue} (~${(buyValue * KRAKEN_ORDER_SIZE).toFixed(
           2
         )} ${CURRENCY})`);
       }

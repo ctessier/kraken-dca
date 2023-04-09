@@ -19,16 +19,16 @@ const ASSETS = {
     hasPrefix: true,
   },
   doge: {
-    code: '',
+    code: 'XDG',
     orderSize: 60,
     hasPrefix: true,
   },
   matic: {
-    code: '',
+    code: 'MATIC',
     orderSize: 4,
   },
   sol: {
-    code: '',
+    code: 'SOL',
     orderSize: 0.25,
   }
 }

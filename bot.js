@@ -333,16 +333,16 @@ const main = async () => {
         );
         logQueue.push(
           `Order for ~${(buyValue * KRAKEN_ORDER_SIZE).toFixed(
-            cryptoPrecision
+            2
           )} ${CURRENCY}`
         );
         sendNotification(buyOrderResponse?.result?.txid[0], `New order for ${CRYPTO.toUpperCase()} @ limit ${buyValue} (~${(buyValue * KRAKEN_ORDER_SIZE).toFixed(
-          cryptoPrecision
+          2
         )} ${CURRENCY})`);
       }
     } catch (e) {
       console.error(
-        "Buy order request failed! Probably a temporary issue with Kraken, if you don't see this error right from the start. Skipping this one."
+        "Buy order request failed! Probably a temporary issue with Kraken, if you don't see this error right from the start. Skipping this one. " + e.message
       );
     }
   };

@@ -391,9 +391,9 @@ const main = async () => {
       (
         await queryPublicApi(
           "Ticker",
-          `pair=${cryptoPrefix}${ASSETS[CRYPTO].code}${fiatPrefix}${CURRENCY}`
+          `pair=${cryptoPrefix}${ASSETS[CRYPTO].code}${cryptoPrefix ? fiatPrefix : ''}${CURRENCY}`
         )
-      )?.result?.[`${cryptoPrefix}${ASSETS[CRYPTO].code}${fiatPrefix}${CURRENCY}`]?.b?.[0]
+      )?.result?.[`${cryptoPrefix}${ASSETS[CRYPTO].code}${cryptoPrefix ? fiatPrefix : ''}${CURRENCY}`]?.b?.[0]
     );
 
   const printInvalidCurrencyError = () => {

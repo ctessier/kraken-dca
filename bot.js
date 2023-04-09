@@ -132,7 +132,7 @@ const main = async () => {
       buyValue = (lastCryptoFiatPrice - (2 / Math.pow(10, cryptoPrecision))).toFixed(cryptoPrecision);
       logQueue.push(`${CRYPTO.toUpperCase()} Price: ${lastCryptoFiatPrice.toFixed(cryptoPrecision)} ${CURRENCY}`);
 
-      const cryptoAmount = Number(balance[`${cryptoPrefix}${ASSET_CODES[CRYPTO]}`]);
+      const cryptoAmount = Number(balance[`${cryptoPrefix}${ASSETS[CRYPTO].code}`]);
       const now = Date.now();
       // ---|--o|---|---|---|---|-o-|---
       //  x  ===  x   x   x   x  ===  x
@@ -349,7 +349,7 @@ const main = async () => {
 
   const executeBuyOrder = async () => {
     const privateEndpoint = "AddOrder";
-    const privateInputParameters = `pair=${ASSET_CODES[CRYPTO].toLowerCase()}${CURRENCY.toLowerCase()}&type=buy&ordertype=limit&volume=${KRAKEN_ORDER_SIZE}&price=${buyValue}&oflags=post`;
+    const privateInputParameters = `pair=${ASSETS[CRYPTO].code.toLowerCase()}${CURRENCY.toLowerCase()}&type=buy&ordertype=limit&volume=${KRAKEN_ORDER_SIZE}&price=${buyValue}&oflags=post`;
     let privateResponse = "";
     privateResponse = await queryPrivateApi(
       privateEndpoint,
@@ -360,7 +360,7 @@ const main = async () => {
 
   const executeWithdrawal = async (amount) => {
     const privateEndpoint = "Withdraw";
-    const privateInputParameters = `asset=${ASSET_CODES[CRYPTO]}&key=${KRAKEN_WITHDRAWAL_ADDRESS_KEY}&amount=${amount}`;
+    const privateInputParameters = `asset=${ASSETS[CRYPTO].code}&key=${KRAKEN_WITHDRAWAL_ADDRESS_KEY}&amount=${amount}`;
     let privateResponse = "";
     privateResponse = await queryPrivateApi(
       privateEndpoint,
@@ -391,9 +391,9 @@ const main = async () => {
       (
         await queryPublicApi(
           "Ticker",
-          `pair=${cryptoPrefix}${ASSET_CODES[CRYPTO]}${fiatPrefix}${CURRENCY}`
+          `pair=${cryptoPrefix}${ASSETS[CRYPTO].code}${fiatPrefix}${CURRENCY}`
         )
-      )?.result?.[`${cryptoPrefix}${ASSET_CODES[CRYPTO]}${fiatPrefix}${CURRENCY}`]?.b?.[0]
+      )?.result?.[`${cryptoPrefix}${ASSETS[CRYPTO].code}${fiatPrefix}${CURRENCY}`]?.b?.[0]
     );
 
   const printInvalidCurrencyError = () => {
